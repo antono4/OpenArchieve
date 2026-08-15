@@ -1,0 +1,8 @@
+build/
+dist/
+__pycache__/
+*.pyc
+server.log
+exe.log
+*.spec.bak
+workspace_data/
