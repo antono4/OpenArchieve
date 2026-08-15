@@ -105,12 +105,13 @@ function renderFileList(items) {
     const row = document.createElement("div");
     row.className = "file-row";
     row.dataset.path = it.path;
+    const isArchive = !it.is_dir && isArchiveName(it.name);
     row.innerHTML = `
       <div class="chk"><input type="checkbox" data-path="${it.path}"></div>
       <div class="name"><span class="ico">${iconFor(it.name, it.is_dir)}</span> ${esc(it.name)}</div>
       <div class="size">${it.is_dir ? "" : it.human_size}</div>
       <div class="date">${it.modified}</div>
-      <div class="dl"></div>`;
+      <div class="dl">${isArchive ? `<button class="btn-green" title="Ekstrak" style="padding:4px 9px;font-size:11px" data-act="ex">📤 Ekstrak</button>` : ""}</div>`;
     row.querySelector(".name").onclick = () => {
       if (it.is_dir) { currentPath = it.path; loadFiles(); }
     };
@@ -119,6 +120,8 @@ function renderFileList(items) {
       else { selected.delete(it.path); row.classList.remove("selected"); }
       updateActions();
     };
+    const exBtn = row.querySelector('[data-act="ex"]');
+    if (exBtn) exBtn.onclick = (e) => { e.stopPropagation(); extractUploaded(it.path, it.name); };
     list.appendChild(row);
   });
   wrap.appendChild(list);
@@ -126,6 +129,12 @@ function renderFileList(items) {
 
 function esc(s) {
   const d = document.createElement("div"); d.textContent = s; return d.innerHTML;
+}
+
+const ARCHIVE_EXTS = [".zip", ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz", ".gz", ".bz2", ".xz"];
+function isArchiveName(name) {
+  const n = name.toLowerCase();
+  return ARCHIVE_EXTS.some(e => n.endsWith(e));
 }
 
 // ---------- Actions ----------
@@ -302,6 +311,18 @@ async function extractArchive(path, name) {
       body: JSON.stringify({ path, subdir: name + "_extracted" }),
     });
     toast(`Diekstrak ke ${data.subdir}`);
+    setTab("extracted");
+  } catch (e) { toast(e.message, "err"); }
+}
+
+// ---------- Extract an uploaded archive (from File Manager) ----------
+async function extractUploaded(path, name) {
+  try {
+    const data = await api("extract_uploads", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+    toast(`"${name}" diekstrak (${data.type}) ke ${data.subdir}`);
     setTab("extracted");
   } catch (e) { toast(e.message, "err"); }
 }

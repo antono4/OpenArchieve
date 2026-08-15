@@ -47,6 +47,73 @@ ARCHIVE_FORMATS = {
 }
 
 
+# Archive type detection (extension + magic bytes) for extract-anywhere support.
+ARCHIVE_EXTS = (".zip", ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz", ".gz", ".bz2", ".xz")
+
+_ZIP_MAGIC = b"PK\x03\x04"
+_GZIP_MAGIC = b"\x1f\x8b"
+
+
+def detect_archive_type(path: Path) -> str:
+    """Return one of: zip, tar, tar.gz, tar.bz2, tar.xz, gzip, bz2, xz, or '' if unrecognized."""
+    name = path.name.lower()
+    try:
+        with open(path, "rb") as f:
+            magic = f.read(6)
+    except OSError:
+        return ""
+    is_tar = False
+    try:
+        is_tar = tarfile.is_tarfile(path)
+    except Exception:
+        is_tar = False
+    if name.endswith(".zip") or magic.startswith(_ZIP_MAGIC):
+        return "zip"
+    if name.endswith((".tar.gz", ".tgz")):
+        return "tar.gz"
+    if name.endswith(".tar.bz2") or name.endswith(".tbz2"):
+        return "tar.bz2"
+    if name.endswith(".tar.xz") or name.endswith(".txz"):
+        return "tar.xz"
+    if name.endswith(".tar") or is_tar:
+        return "tar.gz" if magic.startswith(_GZIP_MAGIC) else ("tar.bz2" if magic.startswith(b"BZh") else ("tar.xz" if magic.startswith(b"\xfd7zXZ") else "tar"))
+    if name.endswith(".gz") or magic.startswith(_GZIP_MAGIC):
+        return "gzip"
+    if name.endswith(".bz2") or magic.startswith(b"BZh"):
+        return "bz2"
+    if name.endswith(".xz") or magic.startswith(b"\xfd7zXZ"):
+        return "xz"
+    return ""
+
+
+def _extract_any(target: Path, out_dir: Path, atype: str) -> None:
+    """Extract an archive of the detected type into out_dir."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if atype == "zip":
+        with zipfile.ZipFile(target) as zf:
+            zf.extractall(out_dir)
+    elif atype in ("tar", "tar.gz", "tar.bz2", "tar.xz"):
+        mode = {"tar": "r", "tar.gz": "r:gz", "tar.bz2": "r:bz2", "tar.xz": "r:xz"}[atype]
+        with tarfile.open(target, mode) as tf:
+            tf.extractall(out_dir)
+    elif atype == "gzip":
+        out_name = target.name[:-3] if target.name.lower().endswith(".gz") else target.name + ".out"
+        with gzip.open(target, "rb") as src, open(out_dir / out_name, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+    elif atype == "bz2":
+        import bz2
+        out_name = target.name[:-4] if target.name.lower().endswith(".bz2") else target.name + ".out"
+        with bz2.open(target, "rb") as src, open(out_dir / out_name, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+    elif atype == "xz":
+        import lzma
+        out_name = target.name[:-3] if target.name.lower().endswith(".xz") else target.name + ".out"
+        with lzma.open(target, "rb") as src, open(out_dir / out_name, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+    else:
+        raise ValueError(f"Unsupported archive type: {atype or 'unknown'}")
+
+
 def _safe_join(base: Path, rel: str) -> Path:
     """Join base with rel, ensuring the result stays within base (no path traversal)."""
     base = base.resolve()
@@ -321,7 +388,7 @@ def api_archives_contents():
     return jsonify({"items": entries})
 
 
-# ---------- Extract archive ----------
+# ---------- Extract archive (from the archives folder) ----------
 
 @app.route("/api/extract", methods=["POST"])
 def api_extract():
@@ -332,23 +399,55 @@ def api_extract():
     if not target.exists():
         return jsonify({"error": "Not found"}), 404
 
-    out_dir = _safe_join(EXTRACT_DIR, sub)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    atype = data.get("type") or detect_archive_type(target)
+    if not atype:
+        return jsonify({"error": "Unsupported archive type"}), 400
 
+    out_dir = _safe_join(EXTRACT_DIR, sub)
     try:
-        if name.endswith(".zip"):
-            with zipfile.ZipFile(target) as zf:
-                zf.extractall(out_dir)
-        elif name.endswith((".tar", ".tar.gz", ".tar.bz2", ".tar.xz", ".tgz")):
-            with tarfile.open(target) as tf:
-                tf.extractall(out_dir)
-        else:
-            return jsonify({"error": "Unsupported archive type"}), 400
+        _extract_any(target, out_dir, atype)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
     files = _list_dir(out_dir, "")
-    return jsonify({"ok": True, "subdir": sub, "items": files})
+    return jsonify({"ok": True, "subdir": sub, "type": atype, "items": files})
+
+
+# ---------- Extract an uploaded archive (from the uploads folder) ----------
+
+@app.route("/api/extract_uploads", methods=["POST"])
+def api_extract_uploads():
+    """Extract any archive file the user uploaded (zip/tar/gz/bz2/xz)."""
+    data = request.get_json(force=True)
+    rel = data.get("path", "")
+    target = _safe_join(UPLOAD_DIR, rel)
+    if not target.exists() or target.is_dir():
+        return jsonify({"error": "File not found"}), 404
+
+    atype = detect_archive_type(target)
+    if not atype:
+        return jsonify({"error": "Not a recognized archive (zip/tar/gz/bz2/xz)"}), 400
+
+    sub = data.get("subdir") or (target.stem + "_extracted")
+    out_dir = _safe_join(EXTRACT_DIR, sub)
+    try:
+        _extract_any(target, out_dir, atype)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    files = _list_dir(out_dir, "")
+    return jsonify({"ok": True, "subdir": sub, "type": atype, "items": files})
+
+
+# ---------- Detect archive type of an uploaded file ----------
+
+@app.route("/api/archive_type")
+def api_archive_type():
+    rel = request.args.get("path", "")
+    target = _safe_join(UPLOAD_DIR, rel)
+    if not target.exists() or target.is_dir():
+        return jsonify({"error": "File not found"}), 404
+    return jsonify({"type": detect_archive_type(target), "is_archive": bool(detect_archive_type(target))})
 
 
 # ---------- Download extracted file ----------
