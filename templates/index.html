@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenArchieve — File Archiver</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Title bar -->
+    <div class="titlebar">
+      <div class="logo">OA</div>
+      <h1>OpenArchieve</h1>
+      <span class="ver">v1.0 — File Archiver</span>
+      <div class="spacer"></div>
+      <div class="toolbar">
+        <span class="stat"><b>ZIP</b> · <b>TAR</b> · <b>GZ</b> · <b>BZ2</b> · <b>XZ</b></span>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab active" data-tab="files">📁 File Manager</div>
+      <div class="tab" data-tab="archives">🗜️ Arsip Saya</div>
+      <div class="tab" data-tab="extracted">📦 Hasil Ekstrak</div>
+    </div>
+
+    <div class="main">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="side-section">Navigasi</div>
+        <button class="side-btn active" data-tab="files"><span class="ico">📁</span> File Manager</button>
+        <button class="side-btn" data-tab="archives"><span class="ico">🗜️</span> Arsip</button>
+        <button class="side-btn" data-tab="extracted"><span class="ico">📦</span> Terekstrak</button>
+        <div class="side-section">Operasi</div>
+        <button class="side-btn" id="btnCompress"><span class="ico">➕</span> Kompres</button>
+        <button class="side-btn" id="btnExtract"><span class="ico">📤</span> Ekstrak</button>
+        <button class="side-btn" id="btnMkdir"><span class="ico">📂</span> Folder Baru</button>
+        <button class="side-btn" id="btnDelete"><span class="ico">🗑️</span> Hapus</button>
+        <button class="side-btn" id="btnRefresh"><span class="ico">🔄</span> Segarkan</button>
+      </div>
+
+      <!-- Content -->
+      <div class="content">
+        <div class="content-header">
+          <div class="breadcrumbs" id="breadcrumbs"></div>
+          <div class="content-toolbar">
+            <span class="stat" id="selCount">tidak ada pilihan</span>
+          </div>
+        </div>
+
+        <div class="file-grid-wrap">
+          <div class="dropzone" id="dropzone">
+            <div class="big">⬆️</div>
+            <div><b>Klik atau seret file ke sini untuk diunggah</b></div>
+            <div class="hint">Mendukung banyak file sekaligus — lalu pilih & kompres</div>
+            <input type="file" id="fileInput" multiple hidden>
+          </div>
+          <div class="progress" id="progress"><div class="bar"></div></div>
+          <div id="fileList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compress modal -->
+  <div class="modal-bg" id="modalCompress">
+    <div class="modal">
+      <div class="modal-head">
+        <span>🗜️ Buat Arsip Baru</span>
+        <button class="btn-ghost" style="padding:2px 8px" onclick="closeModal('modalCompress')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Item yang akan dikompres</label>
+          <div class="sel-items" id="compItems"></div>
+        </div>
+        <div class="field">
+          <label>Format arsip</label>
+          <select id="compFormat"></select>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-ghost" id="compCancel">Batal</button>
+        <button class="btn-primary" id="compBtn">Kompres Sekarang</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mkdir modal -->
+  <div class="modal-bg" id="modalMkdir">
+    <div class="modal" style="width:360px">
+      <div class="modal-head">
+        <span>📂 Buat Folder Baru</span>
+        <button class="btn-ghost" style="padding:2px 8px" onclick="closeModal('modalMkdir')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Nama folder</label>
+          <input type="text" id="mkdirName" placeholder="nama-folder">
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-ghost" id="mkdirCancel">Batal</button>
+        <button class="btn-primary" id="mkdirBtn">Buat</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div class="toast-wrap" id="toastWrap"></div>
+
+  <script id="formatData" type="application/json">{{ formats | tojson }}</script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
