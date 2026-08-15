@@ -1,5 +1,11 @@
 build/
+build_deb/
+build_rpm/
+build_mac/
+build_selfx/
+build_selfx_*/
 dist/
+dist_installers/
 __pycache__/
 *.pyc
 server.log
